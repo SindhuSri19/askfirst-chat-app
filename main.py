@@ -24,17 +24,21 @@ def create_thread():
 
     db = SessionLocal()
 
-    thread = Thread(
-        title="New Chat"
-    )
+    try:
+        thread = Thread(
+            title="New Chat"
+        )
 
-    db.add(thread)
-    db.commit()
-    db.refresh(thread)
+        db.add(thread)
+        db.commit()
+        db.refresh(thread)
 
-    return {
-        "id": thread.id
-    }
+        return {
+            "id": thread.id
+        }
+
+    finally:
+        db.close()
 
 
 @app.get("/threads")
@@ -42,15 +46,19 @@ def get_threads():
 
     db = SessionLocal()
 
-    threads = db.query(Thread).all()
+    try:
+        threads = db.query(Thread).all()
 
-    return [
-        {
-            "id": t.id,
-            "title": t.title
-        }
-        for t in threads
-    ]
+        return [
+            {
+                "id": t.id,
+                "title": t.title
+            }
+            for t in threads
+        ]
+
+    finally:
+        db.close()
 
 
 @app.get("/threads/{thread_id}")
@@ -58,19 +66,23 @@ def get_messages(thread_id: int):
 
     db = SessionLocal()
 
-    messages = (
-        db.query(Message)
-        .filter(Message.thread_id == thread_id)
-        .all()
-    )
+    try:
+        messages = (
+            db.query(Message)
+            .filter(Message.thread_id == thread_id)
+            .all()
+        )
 
-    return [
-        {
-            "role": m.role,
-            "content": m.content
-        }
-        for m in messages
-    ]
+        return [
+            {
+                "role": m.role,
+                "content": m.content
+            }
+            for m in messages
+        ]
+
+    finally:
+        db.close()
 
 
 @app.post("/chat")
@@ -78,51 +90,55 @@ def chat(req: ChatRequest):
 
     db = SessionLocal()
 
-    user_msg = Message(
-        thread_id=req.thread_id,
-        role="user",
-        content=req.message
-    )
-
-    db.add(user_msg)
-    db.commit()
-
-    thread = db.query(Thread).filter(
-        Thread.id == req.thread_id
-    ).first()
-
-    if thread.title == "New Chat":
-        thread.title = req.message[:25]
-        db.commit()
-
-    all_messages = db.query(Message).all()
-
-    llm_messages = []
-
-    for msg in all_messages:
-        llm_messages.append(
-            {
-                "role": msg.role,
-                "content": msg.content
-            }
+    try:
+        user_msg = Message(
+            thread_id=req.thread_id,
+            role="user",
+            content=req.message
         )
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=llm_messages
-    )
+        db.add(user_msg)
+        db.commit()
 
-    answer = response.choices[0].message.content
+        thread = db.query(Thread).filter(
+            Thread.id == req.thread_id
+        ).first()
 
-    assistant_msg = Message(
-        thread_id=req.thread_id,
-        role="assistant",
-        content=answer
-    )
+        if thread and thread.title == "New Chat":
+            thread.title = req.message[:25]
+            db.commit()
 
-    db.add(assistant_msg)
-    db.commit()
+        all_messages = db.query(Message).all()
 
-    return {
-        "response": answer
-    }
+        llm_messages = []
+
+        for msg in all_messages:
+            llm_messages.append(
+                {
+                    "role": msg.role,
+                    "content": msg.content
+                }
+            )
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=llm_messages
+        )
+
+        answer = response.choices[0].message.content
+
+        assistant_msg = Message(
+            thread_id=req.thread_id,
+            role="assistant",
+            content=answer
+        )
+
+        db.add(assistant_msg)
+        db.commit()
+
+        return {
+            "response": answer
+        }
+
+    finally:
+        db.close()
