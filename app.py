@@ -14,11 +14,9 @@ if "thread_id" not in st.session_state:
 
 
 if st.sidebar.button("New Thread"):
-
-    res = requests.post(
-        f"{BASE_URL}/threads"
-    )
-
+    res = requests.post(f"{BASE_URL}/threads")
+    st.write("Status Code:", res.status_code)
+    st.write("Response Text:", res.text)
     st.session_state.thread_id = res.json()["id"]
 
 
